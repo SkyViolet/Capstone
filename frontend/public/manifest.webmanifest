@@ -1,0 +1,18 @@
+{
+  "name": "AI SpendWise",
+  "short_name": "SpendWise",
+  "description": "LLM 기반 스마트 가계부 PWA",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f9fafb",
+  "theme_color": "#111827",
+  "lang": "ko",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

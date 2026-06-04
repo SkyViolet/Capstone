@@ -1,0 +1,392 @@
+/* ─── Reset ──────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+/* ─── 로그인 화면 ────────────────────────────── */
+.login-screen {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  background: linear-gradient(160deg, #1e293b 0%, #0f172a 100%);
+}
+
+.login-hero {
+  text-align: center;
+  color: #fff;
+  margin-bottom: 40px;
+}
+
+.login-logo {
+  font-size: 56px;
+  margin-bottom: 12px;
+}
+
+.login-hero h1 {
+  margin: 0 0 8px;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+.login-hero p {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+.login-form {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ─── 앱 레이아웃 ─────────────────────────────── */
+.app {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  max-width: 480px;
+  margin: 0 auto;
+  background: #f3f4f6;
+}
+
+/* ─── 헤더 ────────────────────────────────────── */
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: #111827;
+  color: #fff;
+}
+
+.header-title {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+}
+
+/* ─── 메인 영역 ───────────────────────────────── */
+.app-main {
+  flex: 1;
+  padding: 20px 16px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ─── 요약 카드 ───────────────────────────────── */
+.summary-card {
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  border-radius: 22px;
+  padding: 28px 24px;
+  color: #fff;
+  text-align: center;
+  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.35);
+}
+
+.summary-label {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 500;
+  opacity: 0.8;
+}
+
+.summary-amount {
+  margin: 0 0 4px;
+  font-size: 38px;
+  font-weight: 900;
+  letter-spacing: -1.5px;
+}
+
+.summary-count {
+  margin: 0;
+  font-size: 13px;
+  opacity: 0.65;
+}
+
+/* ─── 빠른 액션 버튼 3종 ─────────────────────── */
+.action-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 16px 8px;
+  border-radius: 18px;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  transition: opacity 0.15s, transform 0.1s;
+  user-select: none;
+}
+
+.action-btn:active { transform: scale(0.96); }
+.action-btn[aria-disabled="true"] { opacity: 0.6; cursor: not-allowed; }
+
+.action-icon {
+  font-size: 26px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+}
+
+/* 파일 input은 숨기고 label 전체가 클릭 영역 */
+.action-btn input[type="file"] { display: none; }
+
+.btn-camera  { background: #fef3c7; color: #92400e; }
+.btn-add     { background: #d1fae5; color: #065f46; }
+.btn-refresh { background: #ede9fe; color: #4c1d95; }
+
+/* ─── 카드 (수동 입력 폼 등) ─────────────────── */
+.card {
+  background: #fff;
+  border-radius: 18px;
+  padding: 20px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+}
+
+.add-form { display: flex; flex-direction: column; gap: 10px; }
+
+.form-title {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #111827;
+}
+
+/* ─── 입력 요소 (공통) ────────────────────────── */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+select {
+  width: 100%;
+  padding: 13px 16px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 12px;
+  font: inherit;
+  font-size: 15px;
+  background: #f9fafb;
+  color: #111827;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+input:focus, select:focus {
+  border-color: #3b82f6;
+  background: #fff;
+}
+
+/* ─── 버튼 ────────────────────────────────────── */
+.btn-primary {
+  width: 100%;
+  padding: 14px;
+  background: #111827;
+  color: #fff;
+  border: none;
+  border-radius: 14px;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: opacity 0.15s;
+}
+
+.btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.btn-ghost {
+  background: transparent;
+  border: none;
+  color: #6b7280;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+/* ─── 섹션 타이틀 ─────────────────────────────── */
+.section-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 10px;
+}
+
+/* ─── 지출 목록 ───────────────────────────────── */
+.expense-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.expense-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #fff;
+  border-radius: 16px;
+  padding: 14px 16px;
+  gap: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+.expense-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.expense-name {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #111827;
+}
+
+.ocr-tag {
+  font-size: 10px;
+  font-weight: 700;
+  color: #9ca3af;
+  letter-spacing: 0.5px;
+}
+
+.expense-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.expense-amount {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+  color: #111827;
+  letter-spacing: -0.5px;
+}
+
+.expense-actions {
+  display: flex;
+  gap: 2px;
+}
+
+/* 🤖 / 🗑 아이콘 버튼 */
+.icon-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 4px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  transition: background 0.1s;
+}
+
+.icon-btn:hover { background: #f3f4f6; }
+.icon-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ─── 카테고리 배지 ────────────────────────────── */
+.badge {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+
+/* ─── 빈 상태 ────────────────────────────────── */
+.empty-state {
+  text-align: center;
+  padding: 48px 16px;
+  background: #fff;
+  border-radius: 18px;
+  color: #9ca3af;
+  font-size: 14px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+.empty-state p { margin: 4px 0; }
+.empty-state p:first-child { font-size: 32px; }
+
+/* ─── Toast 알림 ─────────────────────────────── */
+.toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 12px 22px;
+  border-radius: 24px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: #1f2937;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.22);
+  z-index: 200;
+  white-space: nowrap;
+  max-width: calc(100vw - 32px);
+  text-align: center;
+  animation: slide-up 0.2s ease;
+}
+
+.toast-error { background: #ef4444; }
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateX(-50%) translateY(12px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ─── CSS 스피너 ──────────────────────────────── */
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2.5px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

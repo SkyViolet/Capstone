@@ -1,0 +1,13 @@
+# Google Cloud Key (보안 필항)
+google_ocr_key.json
+
+# 환경 변수 파일 (DB 비번, 비밀키 등 포함)
+.env
+
+# 파이썬 가상환경 및 캐시
+venv/
+__pycache__/
+*.py[cod]
+
+CLAUDE.md
+PROGRESS.md
