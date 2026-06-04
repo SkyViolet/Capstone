@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import client from './api/client'
 
 const CATEGORIES = ['식비', '카페·간식', '교통', '문화·생활', '주거·통신', '기타']
 
-// 카테고리별 배지 색상 — 시각적으로 바로 구분되도록 고정
 const CAT_COLOR = {
   '식비': '#f97316',
   '카페·간식': '#92400e',
@@ -22,39 +21,177 @@ function Badge({ category }) {
   )
 }
 
-// CSS 스피너 — 버튼 안에 inline으로 사용
 function Spinner() {
   return <span className="spinner" aria-hidden="true" />
 }
 
-export default function App() {
+// ─── 인증 모달 (로그인 / 회원가입 탭) ──────────────────────
+function AuthModal({ initialMode = 'login', onClose, onLoginSuccess }) {
+  const [mode, setMode] = useState(initialMode)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const overlayRef = useRef(null)
+
+  // 탭 전환 시 에러 초기화
+  function switchMode(m) {
+    setMode(m)
+    setError('')
+  }
+
+  // 오버레이 클릭 시 닫기
+  function handleOverlayClick(e) {
+    if (e.target === overlayRef.current) onClose()
+  }
+
+  async function handleLogin(e) {
+    e.preventDefault()
+    setLoading(true)
+    setError('')
+    const form = new URLSearchParams()
+    form.append('username', email)
+    form.append('password', password)
+    try {
+      const { data } = await client.post('/login', form.toString(), {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      })
+      localStorage.setItem('token', data.access_token)
+      onLoginSuccess(data.access_token)
+    } catch {
+      setError('이메일 또는 비밀번호가 틀렸습니다.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleSignup(e) {
+    e.preventDefault()
+    setLoading(true)
+    setError('')
+    try {
+      await client.post('/signup', { email, password })
+      // 가입 완료 → 로그인 탭으로 전환 (이메일 유지)
+      switchMode('login')
+    } catch (err) {
+      setError(err.response?.data?.detail || '회원가입에 실패했습니다.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="modal-overlay" ref={overlayRef} onClick={handleOverlayClick}>
+      <div className="modal-card" role="dialog" aria-modal="true">
+        <button className="modal-close" onClick={onClose} aria-label="닫기">✕</button>
+
+        {/* 탭 전환 */}
+        <div className="modal-tabs">
+          <button
+            className={`modal-tab ${mode === 'login' ? 'active' : ''}`}
+            onClick={() => switchMode('login')}
+          >
+            로그인
+          </button>
+          <button
+            className={`modal-tab ${mode === 'signup' ? 'active' : ''}`}
+            onClick={() => switchMode('signup')}
+          >
+            회원가입
+          </button>
+        </div>
+
+        <form onSubmit={mode === 'login' ? handleLogin : handleSignup}>
+          <input
+            type="email"
+            placeholder="이메일"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            autoComplete="email"
+          />
+          <input
+            type="password"
+            placeholder="비밀번호"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+          />
+
+          {error && <p className="auth-error">{error}</p>}
+
+          <button type="submit" className="btn-primary" disabled={loading}>
+            {loading ? <><Spinner /> {mode === 'login' ? '로그인 중…' : '가입 중…'}</> : (mode === 'login' ? '로그인' : '가입하기')}
+          </button>
+        </form>
+
+        <p className="modal-switch">
+          {mode === 'login' ? (
+            <>계정이 없으신가요?{' '}
+              <button className="link-btn" onClick={() => switchMode('signup')}>회원가입</button>
+            </>
+          ) : (
+            <>이미 계정이 있으신가요?{' '}
+              <button className="link-btn" onClick={() => switchMode('login')}>로그인</button>
+            </>
+          )}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+// ─── 메인 앱 ───────────────────────────────────────────────
+export default function App() {
   const [token, setToken] = useState(localStorage.getItem('token') || '')
   const [expenses, setExpenses] = useState([])
   const [toast, setToast] = useState(null)
 
-  // 업로드/분류/폼 제출 각각 독립 로딩 상태
   const [uploading, setUploading] = useState(false)
   const [categorizingId, setCategorizingId] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [showAddForm, setShowAddForm] = useState(false)
   const [newExp, setNewExp] = useState({ item_name: '', amount: '', category: '식비' })
 
+  // 인증 모달 제어
+  const [authModal, setAuthModal] = useState(null) // null | 'login' | 'signup'
+
   const loggedIn = useMemo(() => Boolean(token), [token])
 
-  // 로그인 상태가 바뀔 때(= 로그인 성공 직후) 지출 목록 자동 로드
+  // 로그인 상태 변경 시 지출 목록 자동 로드
   useEffect(() => {
     if (loggedIn) loadExpenses()
+    else setExpenses([])
   }, [loggedIn]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Toast: 3초 후 자동 소멸
   function showToast(msg, type = 'info') {
     setToast({ msg, type })
     setTimeout(() => setToast(null), 3000)
   }
 
-  // --- API 호출 ---
+  // 로그인이 필요한 액션 — 비로그인 시 모달 오픈
+  function guard(fn) {
+    if (!loggedIn) {
+      setAuthModal('login')
+      return
+    }
+    fn()
+  }
+
+  function handleLoginSuccess(newToken) {
+    setToken(newToken)
+    setAuthModal(null)
+    showToast('로그인 성공!')
+  }
+
+  function logout() {
+    localStorage.removeItem('token')
+    setToken('')
+    showToast('로그아웃되었습니다.')
+  }
+
+  // ─ API 함수 ─
 
   async function loadExpenses() {
     try {
@@ -65,29 +202,6 @@ export default function App() {
     }
   }
 
-  async function login(e) {
-    e.preventDefault()
-    const form = new URLSearchParams()
-    form.append('username', email)
-    form.append('password', password)
-    try {
-      const { data } = await client.post('/login', form.toString(), {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      })
-      localStorage.setItem('token', data.access_token)
-      setToken(data.access_token) // → useEffect가 loadExpenses 호출
-    } catch {
-      showToast('이메일 또는 비밀번호가 틀렸습니다.', 'error')
-    }
-  }
-
-  function logout() {
-    localStorage.removeItem('token')
-    setToken('')
-    setExpenses([])
-  }
-
-  // capture="environment" — 후면 카메라 직접 실행 (iOS Safari 지원)
   async function uploadReceipt(e) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -154,84 +268,81 @@ export default function App() {
     [expenses]
   )
 
-  // --- 렌더링 ---
-
-  if (!loggedIn) {
-    return (
-      <div className="login-screen">
-        <div className="login-hero">
-          <div className="login-logo">💳</div>
-          <h1>AI SpendWise</h1>
-          <p>영수증 촬영으로 스마트하게 관리하는 가계부</p>
-        </div>
-        <form className="login-form" onSubmit={login}>
-          <input
-            type="email"
-            placeholder="이메일"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-          <input
-            type="password"
-            placeholder="비밀번호"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-          <button type="submit" className="btn-primary">로그인</button>
-        </form>
-        {toast && <div className={`toast toast-${toast.type}`}>{toast.msg}</div>}
-      </div>
-    )
-  }
-
   return (
     <div className="app">
+      {/* ─ 헤더 ─ */}
       <header className="app-header">
         <span className="header-title">💳 SpendWise</span>
-        <button className="btn-ghost" onClick={logout}>로그아웃</button>
+        {loggedIn ? (
+          <button className="btn-ghost" onClick={logout}>로그아웃</button>
+        ) : (
+          <div className="header-auth">
+            <button className="btn-ghost" onClick={() => setAuthModal('login')}>로그인</button>
+            <button className="btn-outline" onClick={() => setAuthModal('signup')}>회원가입</button>
+          </div>
+        )}
       </header>
 
       <main className="app-main">
-        {/* 이번 달 총 지출 요약 카드 */}
-        <div className="summary-card">
-          <p className="summary-label">이번 달 총 지출</p>
-          <p className="summary-amount">{totalAmount.toLocaleString()}원</p>
-          <p className="summary-count">{expenses.length}건</p>
-        </div>
+        {/* ─ 요약 카드 ─ */}
+        {loggedIn ? (
+          <div className="summary-card">
+            <p className="summary-label">이번 달 총 지출</p>
+            <p className="summary-amount">{totalAmount.toLocaleString()}원</p>
+            <p className="summary-count">{expenses.length}건</p>
+          </div>
+        ) : (
+          <div className="welcome-card">
+            <p className="welcome-emoji">💳</p>
+            <h2 className="welcome-title">AI SpendWise</h2>
+            <p className="welcome-desc">영수증을 찍으면 AI가 알아서<br />카테고리를 분류하고 소비를 분석해드려요</p>
+            <button className="btn-primary welcome-cta" onClick={() => setAuthModal('signup')}>
+              무료로 시작하기
+            </button>
+          </div>
+        )}
 
-        {/* 빠른 액션 버튼 3종 */}
+        {/* ─ 빠른 액션 버튼 3종 ─ */}
         <div className="action-row">
-          <label className="action-btn btn-camera" aria-disabled={uploading}>
-            {uploading ? <Spinner /> : <span className="action-icon">📷</span>}
-            <span>{uploading ? '처리 중…' : '영수증 촬영'}</span>
-            {/* capture="environment" — 후면 카메라 직접 실행 */}
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={uploadReceipt}
-              disabled={uploading}
-            />
-          </label>
+          {/* 영수증 촬영: 비로그인 시 모달 오픈, 로그인 시 카메라 직접 실행 */}
+          {loggedIn ? (
+            <label className="action-btn btn-camera" aria-disabled={uploading}>
+              {uploading ? <Spinner /> : <span className="action-icon">📷</span>}
+              <span>{uploading ? '처리 중…' : '영수증 촬영'}</span>
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={uploadReceipt}
+                disabled={uploading}
+              />
+            </label>
+          ) : (
+            <button className="action-btn btn-camera" onClick={() => setAuthModal('login')}>
+              <span className="action-icon">📷</span>
+              <span>영수증 촬영</span>
+            </button>
+          )}
 
           <button
             className="action-btn btn-add"
-            onClick={() => setShowAddForm((v) => !v)}
+            onClick={() => guard(() => setShowAddForm((v) => !v))}
           >
             <span className="action-icon">{showAddForm ? '✕' : '+'}</span>
             <span>직접 입력</span>
           </button>
 
-          <button className="action-btn btn-refresh" onClick={loadExpenses}>
+          <button
+            className="action-btn btn-refresh"
+            onClick={() => guard(loadExpenses)}
+          >
             <span className="action-icon">↻</span>
             <span>새로고침</span>
           </button>
         </div>
 
-        {/* 수동 지출 입력 폼 */}
-        {showAddForm && (
+        {/* ─ 수동 지출 입력 폼 ─ */}
+        {showAddForm && loggedIn && (
           <form className="card add-form" onSubmit={addExpense}>
             <h3 className="form-title">지출 추가</h3>
             <input
@@ -264,10 +375,15 @@ export default function App() {
           </form>
         )}
 
-        {/* 지출 내역 목록 */}
+        {/* ─ 지출 내역 ─ */}
         <div>
           <h2 className="section-title">지출 내역</h2>
-          {expenses.length === 0 ? (
+          {!loggedIn ? (
+            <div className="empty-state" onClick={() => setAuthModal('login')} style={{ cursor: 'pointer' }}>
+              <p>🔒</p>
+              <p>로그인하면 지출 내역을 볼 수 있어요</p>
+            </div>
+          ) : expenses.length === 0 ? (
             <div className="empty-state">
               <p>📝</p>
               <p>영수증을 촬영하거나 직접 입력해보세요</p>
@@ -284,7 +400,6 @@ export default function App() {
                   <div className="expense-right">
                     <p className="expense-amount">{exp.amount.toLocaleString()}원</p>
                     <div className="expense-actions">
-                      {/* AI 자동 분류 — 분류 중일 때 스피너 표시 */}
                       <button
                         className="icon-btn"
                         onClick={() => autoCategorize(exp.id)}
@@ -310,6 +425,15 @@ export default function App() {
           )}
         </div>
       </main>
+
+      {/* ─ 인증 모달 ─ */}
+      {authModal && (
+        <AuthModal
+          initialMode={authModal}
+          onClose={() => setAuthModal(null)}
+          onLoginSuccess={handleLoginSuccess}
+        />
+      )}
 
       {toast && <div className={`toast toast-${toast.type}`}>{toast.msg}</div>}
     </div>

@@ -1,47 +1,155 @@
 /* ─── Reset ──────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
 
-/* ─── 로그인 화면 ────────────────────────────── */
-.login-screen {
-  min-height: 100dvh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 32px 24px;
+/* ─── 웰컴 카드 (비로그인 메인 화면) ────────── */
+.welcome-card {
   background: linear-gradient(160deg, #1e293b 0%, #0f172a 100%);
-}
-
-.login-hero {
+  border-radius: 22px;
+  padding: 36px 24px;
   text-align: center;
   color: #fff;
-  margin-bottom: 40px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.35);
 }
 
-.login-logo {
-  font-size: 56px;
-  margin-bottom: 12px;
+.welcome-emoji {
+  font-size: 48px;
+  margin: 0 0 12px;
 }
 
-.login-hero h1 {
-  margin: 0 0 8px;
-  font-size: 30px;
+.welcome-title {
+  margin: 0 0 10px;
+  font-size: 26px;
   font-weight: 800;
   letter-spacing: -0.5px;
 }
 
-.login-hero p {
-  margin: 0;
-  color: #94a3b8;
+.welcome-desc {
+  margin: 0 0 24px;
   font-size: 14px;
+  color: #94a3b8;
+  line-height: 1.6;
 }
 
-.login-form {
+.welcome-cta {
+  max-width: 200px;
+  margin: 0 auto;
+}
+
+/* ─── 인증 모달 ───────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+  padding: 16px;
+  animation: fade-in 0.15s ease;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.modal-card {
+  position: relative;
+  background: #fff;
+  border-radius: 22px;
+  padding: 28px 24px 24px;
   width: 100%;
-  max-width: 360px;
+  max-width: 380px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+  animation: scale-in 0.18s ease;
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.modal-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: #f3f4f6;
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+  transition: background 0.1s;
+}
+.modal-close:hover { background: #e5e7eb; }
+
+.modal-tabs {
+  display: flex;
+  background: #f3f4f6;
+  border-radius: 12px;
+  padding: 4px;
+  margin-bottom: 20px;
+}
+
+.modal-tab {
+  flex: 1;
+  padding: 9px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.modal-tab.active {
+  background: #fff;
+  color: #111827;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+}
+
+.modal-card form {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+}
+
+.auth-error {
+  margin: 0;
+  font-size: 13px;
+  color: #ef4444;
+  padding: 8px 12px;
+  background: #fef2f2;
+  border-radius: 8px;
+}
+
+.modal-switch {
+  margin: 16px 0 0;
+  text-align: center;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  color: #3b82f6;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
 }
 
 /* ─── 앱 레이아웃 ─────────────────────────────── */
@@ -221,11 +329,32 @@ input:focus, select:focus {
 .btn-ghost {
   background: transparent;
   border: none;
-  color: #6b7280;
+  color: #9ca3af;
   font: inherit;
   font-size: 13px;
   cursor: pointer;
   padding: 4px 8px;
+}
+
+/* 헤더 회원가입 버튼 */
+.btn-outline {
+  background: transparent;
+  border: 1.5px solid rgba(255,255,255,0.35);
+  border-radius: 8px;
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 5px 12px;
+  transition: background 0.15s;
+}
+.btn-outline:hover { background: rgba(255,255,255,0.1); }
+
+.header-auth {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 /* ─── 섹션 타이틀 ─────────────────────────────── */
