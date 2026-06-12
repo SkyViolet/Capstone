@@ -55,13 +55,6 @@ class ExpenseFromReceiptResponse(ExpenseResponse):
     ocr_text: str
 
 
-class LlmPromptPreview(BaseModel):
-    """LLM에 실제로 보낼 프롬프트를 미리 확인하기 위한 스키마입니다."""
-
-    model: str
-    prompt: str
-
-
 class AutoCategorizeResponse(BaseModel):
     expense: ExpenseResponse
     comment: str

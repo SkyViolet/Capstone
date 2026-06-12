@@ -58,8 +58,13 @@ function AuthModal({ initialMode = 'login', onClose, onLoginSuccess }) {
       })
       localStorage.setItem('token', data.access_token)
       onLoginSuccess(data.access_token)
-    } catch {
-      setError('이메일 또는 비밀번호가 틀렸습니다.')
+    } catch (err) {
+      // 서버 응답이 아예 없으면(네트워크/IP 문제) 비밀번호 오류로 오인하지 않게 구분해서 안내합니다.
+      setError(
+        err.response
+          ? '이메일 또는 비밀번호가 틀렸습니다.'
+          : '서버에 연결할 수 없습니다. 백엔드 실행 여부와 VITE_API_URL을 확인해주세요.'
+      )
     } finally {
       setLoading(false)
     }
@@ -74,7 +79,11 @@ function AuthModal({ initialMode = 'login', onClose, onLoginSuccess }) {
       // 가입 완료 → 로그인 탭으로 전환 (이메일 유지)
       switchMode('login')
     } catch (err) {
-      setError(err.response?.data?.detail || '회원가입에 실패했습니다.')
+      setError(
+        err.response
+          ? (err.response.data?.detail || '회원가입에 실패했습니다.')
+          : '서버에 연결할 수 없습니다. 백엔드 실행 여부와 VITE_API_URL을 확인해주세요.'
+      )
     } finally {
       setLoading(false)
     }
@@ -154,16 +163,38 @@ export default function App() {
   const [showAddForm, setShowAddForm] = useState(false)
   const [newExp, setNewExp] = useState({ item_name: '', amount: '', category: '식비' })
 
+  // 예산 (Phase 4): 내 프로필(예산 한도) + 설정 폼
+  const [user, setUser] = useState(null)
+  const [showBudgetForm, setShowBudgetForm] = useState(false)
+  const [budgetInput, setBudgetInput] = useState({ monthly_income: '', budget_limit: '' })
+  const [savingBudget, setSavingBudget] = useState(false)
+
   // 인증 모달 제어
   const [authModal, setAuthModal] = useState(null) // null | 'login' | 'signup'
 
   const loggedIn = useMemo(() => Boolean(token), [token])
 
-  // 로그인 상태 변경 시 지출 목록 자동 로드
+  // 로그인 상태 변경 시 지출 목록 + 내 프로필(예산) 자동 로드
   useEffect(() => {
-    if (loggedIn) loadExpenses()
-    else setExpenses([])
+    if (loggedIn) {
+      loadExpenses()
+      loadUser()
+    } else {
+      setExpenses([])
+      setUser(null)
+    }
   }, [loggedIn]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 토큰 만료(401) 시 client.js가 보내는 이벤트 수신 → 로그아웃 처리 + 재로그인 유도
+  useEffect(() => {
+    function onUnauthorized() {
+      setToken('')
+      setAuthModal('login')
+      showToast('로그인이 만료되었습니다. 다시 로그인해주세요.', 'error')
+    }
+    window.addEventListener('auth:unauthorized', onUnauthorized)
+    return () => window.removeEventListener('auth:unauthorized', onUnauthorized)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function showToast(msg, type = 'info') {
     setToast({ msg, type })
@@ -193,12 +224,59 @@ export default function App() {
 
   // ─ API 함수 ─
 
+  // 요약 카드가 "이번 달 총 지출"이므로, 이번 달 1일~말일 범위만 조회합니다.
+  function currentMonthRange() {
+    const now = new Date()
+    const fmt = (d) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    return {
+      start_date: fmt(new Date(now.getFullYear(), now.getMonth(), 1)),
+      end_date: fmt(new Date(now.getFullYear(), now.getMonth() + 1, 0)),
+    }
+  }
+
   async function loadExpenses() {
     try {
-      const { data } = await client.get('/expenses')
+      const { data } = await client.get('/expenses', { params: currentMonthRange() })
       setExpenses(data)
     } catch {
       showToast('지출 목록 조회 실패', 'error')
+    }
+  }
+
+  async function loadUser() {
+    try {
+      const { data } = await client.get('/users/me')
+      setUser(data)
+    } catch {
+      // 토큰 만료 등은 401 인터셉터가 처리하므로 여기선 조용히 넘어갑니다.
+    }
+  }
+
+  function openBudgetForm() {
+    // 현재 설정값을 미리 채워서 수정하기 편하게
+    setBudgetInput({
+      monthly_income: user?.monthly_income ? String(user.monthly_income) : '',
+      budget_limit: user?.budget_limit ? String(user.budget_limit) : '',
+    })
+    setShowBudgetForm((v) => !v)
+  }
+
+  async function saveBudget(e) {
+    e.preventDefault()
+    setSavingBudget(true)
+    try {
+      const { data } = await client.patch('/users/me/budget', {
+        monthly_income: Number(budgetInput.monthly_income || 0),
+        budget_limit: Number(budgetInput.budget_limit || 0),
+      })
+      setUser(data)
+      setShowBudgetForm(false)
+      showToast('예산이 저장되었습니다!')
+    } catch {
+      showToast('예산 저장 실패', 'error')
+    } finally {
+      setSavingBudget(false)
     }
   }
 
@@ -209,9 +287,11 @@ export default function App() {
     const formData = new FormData()
     formData.append('file', file)
     try {
-      await client.post('/expenses/from-receipt', formData)
-      showToast('영수증 등록 완료!')
+      const { data } = await client.post('/expenses/from-receipt', formData)
+      showToast('영수증 등록 완료! AI가 카테고리를 분류 중…')
       await loadExpenses()
+      // 촬영 → OCR → AI 분류까지 한 흐름으로 — 등록 직후 자동 분류를 이어서 실행합니다.
+      await autoCategorize(data.id)
     } catch {
       showToast('영수증 처리 실패', 'error')
     } finally {
@@ -254,6 +334,8 @@ export default function App() {
   }
 
   async function deleteExpense(id) {
+    // 모바일 오터치 한 번으로 바로 삭제되지 않도록 확인 단계를 둡니다.
+    if (!window.confirm('이 지출 내역을 삭제할까요?')) return
     try {
       await client.delete(`/expenses/${id}`)
       setExpenses((prev) => prev.filter((e) => e.id !== id))
@@ -267,6 +349,29 @@ export default function App() {
     () => expenses.reduce((sum, e) => sum + e.amount, 0),
     [expenses]
   )
+
+  // 예산 상태: 한도 미설정(null) / ok / warn(80% 이상) / over(초과)
+  const budget = useMemo(() => {
+    const limit = user?.budget_limit ?? 0
+    if (limit <= 0) return null
+    const pct = Math.round((totalAmount / limit) * 100)
+    return {
+      limit,
+      pct,
+      state: pct >= 100 ? 'over' : pct >= 80 ? 'warn' : 'ok',
+      remaining: limit - totalAmount,
+    }
+  }, [user, totalAmount])
+
+  // 예산 초과 순간(미초과 → 초과)에만 경고 토스트 — 새로고침마다 반복되지 않게 ref로 추적
+  const wasOverRef = useRef(false)
+  useEffect(() => {
+    const isOver = budget?.state === 'over'
+    if (isOver && !wasOverRef.current) {
+      showToast(`⚠️ 이번 달 예산을 ${Math.abs(budget.remaining).toLocaleString()}원 초과했어요!`, 'error')
+    }
+    wasOverRef.current = isOver
+  }, [budget]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="app">
@@ -286,10 +391,43 @@ export default function App() {
       <main className="app-main">
         {/* ─ 요약 카드 ─ */}
         {loggedIn ? (
-          <div className="summary-card">
-            <p className="summary-label">이번 달 총 지출</p>
+          <div className={`summary-card ${budget ? `budget-${budget.state}` : ''}`}>
+            <div className="summary-top">
+              <p className="summary-label">이번 달 총 지출</p>
+              <button
+                className="budget-gear"
+                onClick={openBudgetForm}
+                title="예산 설정"
+                aria-label="예산 설정"
+              >
+                ⚙️
+              </button>
+            </div>
             <p className="summary-amount">{totalAmount.toLocaleString()}원</p>
             <p className="summary-count">{expenses.length}건</p>
+
+            {budget ? (
+              <div className="budget-box">
+                <div className="budget-bar">
+                  <div
+                    className="budget-bar-fill"
+                    style={{ width: `${Math.min(budget.pct, 100)}%` }}
+                  />
+                </div>
+                <div className="budget-meta">
+                  <span>예산 {budget.limit.toLocaleString()}원 · {budget.pct}%</span>
+                  <span className="budget-remaining">
+                    {budget.state === 'over'
+                      ? `${Math.abs(budget.remaining).toLocaleString()}원 초과!`
+                      : `남은 예산 ${budget.remaining.toLocaleString()}원`}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <button className="budget-set-cta" onClick={openBudgetForm}>
+                월 예산을 설정하고 초과 경고를 받아보세요 →
+              </button>
+            )}
           </div>
         ) : (
           <div className="welcome-card">
@@ -300,6 +438,33 @@ export default function App() {
               무료로 시작하기
             </button>
           </div>
+        )}
+
+        {/* ─ 예산 설정 폼 ─ */}
+        {showBudgetForm && loggedIn && (
+          <form className="card add-form" onSubmit={saveBudget}>
+            <h3 className="form-title">월 예산 설정</h3>
+            <input
+              type="number"
+              placeholder="월 수입 (선택, 원)"
+              value={budgetInput.monthly_income}
+              onChange={(e) => setBudgetInput({ ...budgetInput, monthly_income: e.target.value })}
+              min="0"
+              inputMode="numeric"
+            />
+            <input
+              type="number"
+              placeholder="월 예산 한도 (원)"
+              value={budgetInput.budget_limit}
+              onChange={(e) => setBudgetInput({ ...budgetInput, budget_limit: e.target.value })}
+              required
+              min="0"
+              inputMode="numeric"
+            />
+            <button type="submit" className="btn-primary" disabled={savingBudget}>
+              {savingBudget ? <><Spinner /> 저장 중…</> : '저장'}
+            </button>
+          </form>
         )}
 
         {/* ─ 빠른 액션 버튼 3종 ─ */}

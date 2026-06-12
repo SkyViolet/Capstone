@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import re
 from dataclasses import dataclass
@@ -6,6 +7,12 @@ from dataclasses import dataclass
 from google import genai
 
 from .ai_prompt import CATEGORIES
+
+logger = logging.getLogger(__name__)
+
+# gemini-1.5-flash는 Google이 단계적 폐기 중이라 기본값을 2.5-flash로 둡니다.
+# 모델 교체가 필요하면 코드 수정 없이 .env의 GEMINI_MODEL만 바꾸면 됩니다.
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 
 @dataclass
@@ -56,20 +63,26 @@ def categorize_expense_with_llm(prompt: str, item_name: str) -> CategorizationRe
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
 
     if not api_key:
+        logger.warning("GEMINI_API_KEY 미설정 — 규칙 기반 fallback으로 분류합니다.")
         return _rule_based(item_name)
 
     try:
         client = genai.Client(api_key=api_key)
         response = client.models.generate_content(
-            model="gemini-1.5-flash",
+            model=GEMINI_MODEL,
             contents=prompt,
         )
         content = response.text or ""
     except Exception:
+        # 조용히 fallback으로 넘어가면 모델 폐기/쿼터 초과를 영영 모르게 되므로 반드시 로그를 남깁니다.
+        logger.exception("Gemini 호출 실패 (model=%s) — 규칙 기반 fallback 사용", GEMINI_MODEL)
         return _rule_based(item_name)
 
     obj = _extract_json(content)
     if not obj:
+        logger.warning(
+            "Gemini 응답 JSON 파싱 실패 — 규칙 기반 fallback 사용. 응답 일부: %.200s", content
+        )
         return _rule_based(item_name)
 
     category = _normalize_category(str(obj.get("category", "")))

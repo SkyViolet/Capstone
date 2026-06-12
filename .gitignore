@@ -1,16 +1,18 @@
-# Google Cloud Key (보안 필항)
+# ── 보안 ─────────────────────────────────────────
 google_ocr_key.json
-
-# 환경 변수 파일 (DB 비번, 비밀키 등 포함)
 .env
+frontend/.env.development   # 로컬 IP 포함 — 개발자마다 다름
 
-# 파이썬 가상환경 및 캐시
+# ── 업로드된 사용자 파일 ─────────────────────────
+static/uploads/receipts/
+
+# ── Python ───────────────────────────────────────
 venv/
 __pycache__/
 *.py[cod]
 
+# ── 로컬 전용 ────────────────────────────────────
 CLAUDE.md
 PROGRESS.md
-
 start.bat
 start.ps1

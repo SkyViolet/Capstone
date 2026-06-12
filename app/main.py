@@ -1,4 +1,4 @@
-import jwt
+import os
 import uuid
 from contextlib import asynccontextmanager
 from datetime import date
@@ -9,11 +9,11 @@ load_dotenv()
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
-from .auth import ALGORITHM, SECRET_KEY, create_access_token
+from .auth import create_access_token, get_current_user, get_password_hash, verify_password
 from . import crud, models, schemas
 from .ai_prompt import build_expense_categorization_prompt
 from .database import engine, ensure_expenses_schema, get_db
@@ -23,8 +23,6 @@ from .paths import STATIC_DIR, UPLOAD_DIR, ensure_static_upload_dirs
 from .receipt_parser import parse_receipt_title_and_amount
 
 models.Base.metadata.create_all(bind=engine)
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 # 업로드 허용 타입 (브라우저/앱에서 흔히 쓰는 영수증 이미지)
 _RECEIPT_CONTENT_TYPES = {
@@ -44,13 +42,17 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+# CORS 허용 출처는 .env(ALLOWED_ORIGINS, 콤마 구분)로 관리 — IP가 바뀌어도 소스코드 수정 없이 .env만 고치면 됩니다.
+_default_origins = "http://localhost:5173,http://127.0.0.1:5173"
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("ALLOWED_ORIGINS", _default_origins).split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://172.31.7.209:5173",
-    ],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -80,8 +82,9 @@ def signup(user: schemas.UserCreate, db: Session = Depends(get_db)):
     if db_user:
         raise HTTPException(status_code=400, detail="이미 등록된 이메일입니다.")
     
-    # 2. 유저 생성 후 결과 반환
-    return crud.create_user(db=db, user=user)
+    # 2. 비밀번호 해싱(auth.py 책임) 후 유저 생성 — crud는 순수 DB 작업만 담당
+    hashed_password = get_password_hash(user.password)
+    return crud.create_user(db=db, user=user, hashed_password=hashed_password)
 
 @app.post("/login")
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
@@ -89,7 +92,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     user = crud.get_user_by_email(db, email=form_data.username)
     
     # 2. 유저가 없거나 비밀번호가 틀리면 에러 발생
-    if not user or not crud.verify_password(form_data.password, user.hashed_password):
+    if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=400, detail="이메일이나 비밀번호가 틀렸습니다.")
     
     # 3. 로그인 성공 시 JWT 토큰 발급
@@ -98,35 +101,6 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     # 4. 토큰 반환 (이 규격을 맞춰야 Swagger UI가 토큰을 인식합니다)
     return {"access_token": access_token, "token_type": "bearer"}
 
-
-
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="입장권(토큰)이 유효하지 않거나 만료되었습니다.",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    
-    try:
-        # 1. 토큰 해독 (암호 풀기)
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        
-        # 2. 토큰 안에 숨겨둔 이메일(sub) 꺼내기
-        email: str = payload.get("sub")
-        if email is None:
-            raise credentials_exception
-            
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="토큰이 만료되었습니다. 다시 로그인해주세요.")
-    except jwt.InvalidTokenError:
-        raise credentials_exception
-
-    # 3. DB에서 이메일로 실제 유저 정보 찾기
-    user = crud.get_user_by_email(db, email=email)
-    if user is None:
-        raise credentials_exception
-        
-    return user
 
 @app.get("/users/me", response_model=schemas.UserResponse)
 def read_users_me(current_user: models.User = Depends(get_current_user)):
@@ -153,7 +127,7 @@ def update_my_budget(
     return crud.update_user_budget(db=db, user=current_user, budget_data=budget_data)
 
 @app.post("/expenses/from-receipt", response_model=schemas.ExpenseFromReceiptResponse)
-async def create_expense_from_receipt(
+def create_expense_from_receipt(
     file: UploadFile = File(..., description="영수증 이미지 (JPEG/PNG/WebP)"),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
@@ -162,6 +136,9 @@ async def create_expense_from_receipt(
     이미지를 static/uploads/receipts/{user_id}/ 아래에 저장한 뒤 Vision OCR로 텍스트를 읽고,
     간단한 규칙으로 금액·품목 후보를 채워 지출 한 건을 만듭니다.
     브라우저에서 파일 URL: /static/ + DB의 receipt_image_path 값.
+
+    내부의 Vision OCR 호출이 동기(블로킹)라서 async def 대신 def로 둡니다 —
+    FastAPI가 스레드풀에서 실행해 이벤트 루프가 OCR 동안 멈추지 않습니다.
     """
     content_type = (file.content_type or "").split(";")[0].strip().lower()
     if content_type not in _RECEIPT_CONTENT_TYPES:
@@ -170,7 +147,7 @@ async def create_expense_from_receipt(
             detail="지원하는 이미지 형식은 JPEG, PNG, WebP 입니다.",
         )
 
-    body = await file.read()
+    body = file.file.read()
     if len(body) == 0:
         raise HTTPException(status_code=400, detail="빈 파일입니다.")
     if len(body) > _MAX_RECEIPT_BYTES:
@@ -195,12 +172,14 @@ async def create_expense_from_receipt(
 
     title, amount = parse_receipt_title_and_amount(ocr_text)
     try:
+        # category는 None(미분류)으로 둡니다 — 고정 6개 카테고리 외 값("OCR")을 넣지 않고,
+        # 분류는 이후 auto-categorize(AI)가 담당합니다.
         expense = crud.create_user_expense_from_receipt(
             db=db,
             user_id=current_user.id,
             item_name=title,
             amount=amount,
-            category="OCR",
+            category=None,
             relative_image_path=relative_path,
         )
     except Exception as e:
@@ -294,42 +273,6 @@ def delete_user_expense(
         raise HTTPException(status_code=404, detail="지출 내역을 찾을 수 없습니다.")
     crud.delete_user_expense(db=db, expense=expense)
     return None
-
-
-@app.get(
-    "/expenses/{expense_id}/llm-prompt",
-    response_model=schemas.LlmPromptPreview,
-)
-def get_expense_llm_prompt(
-    expense_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-):
-    """
-    특정 지출 건에 대해 '지출 카테고리 자동 분류'에 사용할 LLM 프롬프트를 미리봅니다.
-
-    실제 EEVE-Korean 호출은 아직 붙이지 않고, 우선 프롬프트 내용을 눈으로 검증하는 단계입니다.
-    """
-    expense = crud.get_user_expense(db, expense_id=expense_id, user_id=current_user.id)
-    if expense is None:
-        raise HTTPException(status_code=404, detail="지출 내역을 찾을 수 없습니다.")
-
-    expense_schema = schemas.ExpenseResponse.model_validate(expense)
-    # OCR 기반 지출이면 원문을, 아니면 기본 텍스트만 사용
-    ocr_text = ""
-    if expense.is_ocr and expense.receipt_image_path:
-        # 현재는 OCR 원문을 별도로 저장하지 않으므로, 간단히 품목/금액 위주로 프롬프트를 만듭니다.
-        ocr_text = f"{expense_schema.item_name} / {expense_schema.amount}원 결제 영수증"
-
-    prompt = build_expense_categorization_prompt(
-        expense=expense_schema,
-        ocr_text=ocr_text,
-        user_budget_limit=current_user.budget_limit,
-    )
-    return schemas.LlmPromptPreview(
-        model="EEVE-Korean-Instruct-10.8B-v1.0",
-        prompt=prompt,
-    )
 
 
 @app.post(

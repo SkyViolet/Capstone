@@ -2,40 +2,25 @@ from datetime import date, datetime, time
 from typing import Optional
 
 from sqlalchemy.orm import Session
-from passlib.context import CryptContext
 from . import models, schemas
-
-# 비밀번호 암호화를 위한 설정 (bcrypt 알고리즘 사용)
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-# 비밀번호를 해시(암호화)하는 함수
-def get_password_hash(password):
-    return pwd_context.hash(password)
 
 # 이메일로 기존 유저가 있는지 확인하는 함수
 def get_user_by_email(db: Session, email: str):
     return db.query(models.User).filter(models.User.email == email).first()
 
 # 새로운 유저를 DB에 생성하는 함수
-def create_user(db: Session, user: schemas.UserCreate):
-    # 1. 비밀번호 암호화
-    hashed_password = get_password_hash(user.password)
-    
-    # 2. DB 모델 객체 생성
+# 비밀번호 해싱은 auth.py 책임이므로, 여기는 이미 해싱된 값만 받습니다 (crud = 순수 DB 작업 규칙).
+def create_user(db: Session, user: schemas.UserCreate, hashed_password: str):
     db_user = models.User(
         email=user.email,
         hashed_password=hashed_password
     )
-    
-    # 3. DB에 저장 및 반영
+
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
-    
-    return db_user
 
-def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
+    return db_user
 
 def create_user_expense(db: Session, expense: schemas.ExpenseCreate, user_id: int):
     db_expense = models.Expense(**expense.model_dump(), user_id=user_id)
